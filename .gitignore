@@ -1,0 +1,21 @@
+# Crear archivo .gitignore
+echo "# Python virtual environment
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Data directories
+input_images/*
+output_segmentations/*
+preprocessed/*
+
+# Keep .gitkeep files
+!input_images/.gitkeep
+!output_segmentations/.gitkeep
+!preprocessed/.gitkeep
+
+# Otros archivos a ignorar
+.DS_Store
+.env
+.vscode/" > .gitignore
