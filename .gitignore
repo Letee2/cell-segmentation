@@ -18,4 +18,8 @@ preprocessed/*
 # Otros archivos a ignorar
 .DS_Store
 .env
-.vscode/" > .gitignore
+.vscode/" > .gitignorecsv_metrics/
+input_images/
+preprocessed/
+true_comparison/
+output_segmentations/

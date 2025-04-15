@@ -37,7 +37,7 @@ class FileUtils:
         cv2.imwrite(output_path, cv2.cvtColor(composite, cv2.COLOR_RGB2BGR))
     
     def save_metadata(self, image_path: str, mask: np.ndarray, info: Dict[str, Any],
-                  output_path: str) -> None:
+                  output_path: str,extra_data = None) -> None:
         """Guarda metadatos de la segmentación."""
         # Extraer información relevante
         cell_count = len(np.unique(mask)) - 1  # Restar 1 para excluir el fondo (ID 0)
@@ -67,7 +67,9 @@ class FileUtils:
             'mean_cell_area': int(np.mean(cell_areas)) if cell_areas else 0,
             'cellpose_diameter': diameter
         }
-        
+        if extra_data:
+            metadata["evaluation"] = extra_data
+
         with open(output_path, 'w') as f:
             json.dump(metadata, f, indent=2)
 

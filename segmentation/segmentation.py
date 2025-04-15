@@ -5,12 +5,16 @@ import numpy as np
 import yaml
 from tqdm import tqdm
 import time
-
+import re
 from data.data_loader import DataLoader
 from data.data_preprocessor import DataPreprocessor
 from models.cellpose_model import CellPoseModel
 from utils.visualization import Visualizer
 from utils.file_utils import FileUtils
+
+from utils.evaluate_segmentation import evaluate_masks
+import imageio.v3 as iio  # For reading TIFFs
+
 
 class SegmentationPipeline:
     def __init__(self, config_path: str):
@@ -25,6 +29,15 @@ class SegmentationPipeline:
         self.model = CellPoseModel(config_path)
         self.visualizer = Visualizer(config_path)
         self.file_utils = FileUtils(config_path)
+
+    def evaluate_single_image(self, pred_mask_path: str, gt_mask_path: str) -> Dict[str, float]:
+        """
+        Compara máscara predicha vs ground truth y devuelve métricas.
+        """
+        pred_mask = iio.imread(pred_mask_path)
+        gt_mask = iio.imread(gt_mask_path)
+        return evaluate_masks(gt_mask, pred_mask)
+
     
     def process_single_image(self, image_path: str, 
                            save_mask: bool = True,
@@ -72,16 +85,36 @@ class SegmentationPipeline:
             self.file_utils.save_composite(image, mask, composite_path)
             results['files']['composite'] = composite_path
         
-        if save_metadata:
-            metadata_path = f"{base_name}_metadata.json"
-            self.file_utils.save_metadata(image_path, mask, info, metadata_path)
-            results['files']['metadata'] = metadata_path
+        
         
         if save_visualization:
             viz_path = f"{base_name}_visualization.png"
             self.visualizer.create_segmentation_figure(image, mask, viz_path)
             results['files']['visualization'] = viz_path
-        
+            
+        # Evaluar contra ground truth si está disponible
+        gt_dir = self.config['data'].get('ground_truth_dir', None)
+        evaluation = None
+        if gt_dir:
+            import re
+            basename = os.path.basename(image_path)
+            match = re.search(r't(\d+)', basename)
+            if match:
+                frame_num = match.group(1).zfill(3)
+                gt_filename_options = [f"man_seg{frame_num}.tif", f"man_seg{int(frame_num)}.tif"]
+                for fname in gt_filename_options:
+                    gt_path = os.path.join(gt_dir, fname)
+                    if os.path.exists(gt_path):
+                        evaluation = self.evaluate_single_image(self.data_loader.get_output_path(image_path, suffix='_mask'), gt_path)
+                        break
+            if evaluation:
+                results['evaluation'] = evaluation
+
+        if save_metadata:
+            metadata_path = f"{base_name}_metadata.json"
+            self.file_utils.save_metadata(image_path, mask, info, metadata_path,extra_data = evaluation)
+            results['files']['metadata'] = metadata_path
+
         return results
     
     def process_batch(self, image_paths: List[str], batch_size: int = 10, 
@@ -110,6 +143,8 @@ class SegmentationPipeline:
         
         return results
     
+     # asegúrate de tener esto importado
+
     def process_all_images(self, **kwargs) -> Dict[str, Any]:
         """
         Procesa todas las imágenes encontradas por el DataLoader.
@@ -124,8 +159,31 @@ class SegmentationPipeline:
         start_time = time.time()
         
         results = self.process_batch(image_paths, **kwargs)
-        
-        # Calcular estadísticas
+
+        if 'ground_truth_dir' in self.config['data']:
+            gt_dir = self.config['data']['ground_truth_dir']
+            for result in results:
+                pred_path = result['files'].get('mask')
+                if not pred_path:
+                    continue
+
+                # Buscar número de frame desde el nombre del archivo
+                basename = os.path.basename(pred_path)
+                match = re.search(r't(\d+)', basename)  # ej: t012_mask.tif → 012
+                if match:
+                    frame_num = match.group(1).zfill(3)
+                    gt_filename = f"man_seg{frame_num}.tif"
+                    gt_path = os.path.join(gt_dir, gt_filename)
+
+                    if os.path.exists(gt_path):
+                        metrics = self.evaluate_single_image(pred_path, gt_path)
+                        result['evaluation'] = metrics
+                    else:
+                        print(f"⚠️ Ground truth not found: {gt_filename}")
+                else:
+                    print(f"❌ No se pudo extraer el número de frame desde {basename}")
+
+        # Calcular estadísticas generales
         cell_counts = [r['cell_count'] for r in results]
         
         stats = {
@@ -139,6 +197,7 @@ class SegmentationPipeline:
             'results': results,
             'statistics': stats
         }
+
     
     def process_by_scene(self, **kwargs) -> Dict[str, Dict[str, Any]]:
         """
