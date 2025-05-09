@@ -1,24 +1,23 @@
-# Configuración General
-data:
-  input_dir: "./input_images/Green_Maxt0_255"
-  output_dir: "./output_segmentations"
-  pattern: "Maxt0_*_*.jpg"
-
 cellpose:
-  model_type: "nuclei"  # Puede ser "cyto", "nuclei", etc.
-  channels: [0, 0]    # [canal_para_núcleo, canal_para_célula]
-  diameter: 120        # Diámetro aproximado de células en píxeles
-  gpu: True          # Usar GPU si está disponible
-  flow_threshold: 0.8 # Umbral para la detección
-  cellprob_threshold: -1.0 # Umbral de probabilidad de célula
-
-segmentation:
-  save_masks: True
-  save_outlines: True
-  save_composite: True  # Guardar imagen original con contornos superpuestos
-
+  cellprob_threshold: 0.35
+  channels:
+  - 1
+  - 1
+  diameter: 0
+  flow_threshold: 0.5
+  gpu: true
+  model_type: cyto2
+data:
+  ground_truth_dir: ./ground_truth/Fluo-N2DL-HeLa_01
+  input_dir: ./input_images/Fluo-N2DL-HeLa_01
+  output_dir: ./output_segmentations/Fluo-N2DL-HeLa_01
+  pattern: t*.tif
 preprocessing:
-  use_single_channel: True         # Si True, se extrae solo el canal verde
-  channel_index: 1                 # 0=rojo, 1=verde, 2=azul (en RGB)
-  invert_intensity: False          # Invertir intensidades o no
-  scale_to_01: True               # Normalizar a [0,1] usando float32
+  channel_index: 1
+  invert_intensity: false
+  scale_to_01: false
+  use_single_channel: true
+segmentation:
+  save_composite: true
+  save_masks: true
+  save_outlines: true
