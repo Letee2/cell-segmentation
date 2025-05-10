@@ -40,10 +40,12 @@ class SegmentationPipeline:
 
     
     def process_single_image(self, image_path: str, 
-                           save_mask: bool = True,
+                           save_mask: bool = False,
                            save_composite: bool = True,
-                           save_metadata: bool = True,
-                           save_visualization: bool = False) -> Dict[str, Any]:
+                           save_metadata: bool = False,
+                           save_visualization: bool = False,
+                           save_flow_map: bool = True,
+                           save_flow_animation: bool = True) -> Dict[str, Any]:
         """
         Procesa una sola imagen a través del pipeline completo.
         
@@ -86,11 +88,37 @@ class SegmentationPipeline:
             results['files']['composite'] = composite_path
         
         
-        
         if save_visualization:
             viz_path = f"{base_name}_visualization.png"
             self.visualizer.create_segmentation_figure(image, mask, viz_path)
             results['files']['visualization'] = viz_path
+
+        flows = info['flows'][1]  
+
+        dy = flows[0]  # Componente Y (vertical)
+        dx = flows[1]  # Componente X (horizontal)
+        if flows.shape[0] != 2:
+            raise ValueError(f"Formato inesperado de flows: se esperaba (2, H, W), pero se obtuvo {flows.shape}")
+
+        if save_flow_map:
+            flow_map_path = f"{base_name}_flowmap.png"
+            self.visualizer.create_flowmap_figure(dy, dx, flow_map_path)
+            results['files']['flow_map'] = flow_map_path
+
+        if save_flow_animation:
+            flow_anim_path = f"{base_name}_flowanim.gif"
+            self.visualizer.create_flow_animation(
+                image=processed_image,
+                dy=dy,
+                dx=dx,
+                mask=mask,  
+                save_path=flow_anim_path,
+                n_frames=30,
+                fps=5,
+                flow_amplification=10
+            )
+            results['files']['flow_animation'] = flow_anim_path
+
             
         # Evaluar contra ground truth si está disponible
         gt_dir = self.config['data'].get('ground_truth_dir', None)

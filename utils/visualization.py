@@ -1,8 +1,10 @@
 # 5. utils/visualization.py
+import os
 import matplotlib.pyplot as plt
 import numpy as np
 import cv2
 from typing import Optional, Tuple, List
+import matplotlib.animation as animation
 import yaml
 
 class Visualizer:
@@ -91,3 +93,102 @@ class Visualizer:
             plt.close()
         else:
             plt.show()
+
+    def create_flowmap_figure(self, dy, dx, save_path: Optional[str] = None) -> None:
+            """
+            Crea y guarda una visualización del mapa de vectores.
+            
+            Args:
+                flow_map: Array de shape (2, H, W) con vectores X e Y
+                save_path: Ruta para guardar la imagen
+            """
+
+            step = 5 # Flechas cada 5 píxeles
+            H, W = dy.shape
+
+            Y, X = np.mgrid[0:H:step, 0:W:step] 
+            U = dx[::step, ::step]  
+            V = dy[::step, ::step]  
+
+            plt.figure(figsize=(8, 8))
+            plt.quiver(X, Y, U, V, color='red', angles='xy', scale_units='xy', scale=1)
+            plt.axis('off')
+            plt.gca().invert_yaxis()
+            plt.tight_layout()
+            plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
+            plt.close()
+
+
+    def create_flow_animation(self,
+                            image: np.ndarray,
+                            dy: np.ndarray,
+                            dx: np.ndarray,
+                            mask: np.ndarray,
+                            save_path: str,
+                            n_frames: int = 20,
+                            fps: int = 5,
+                            flow_amplification: float = 2.0) -> None:
+        """
+        Genera una animación GIF/MP4 donde los píxeles de cada célula
+        se desplazan siguiendo los vectores, pero se reproduce en reversa
+        para simular flujo hacia el centro.
+        """
+
+        H, W = dy.shape
+        Y, X = np.meshgrid(np.arange(H), np.arange(W), indexing='ij')
+        pos_y = Y.astype(np.float32)
+        pos_x = X.astype(np.float32)
+
+        step_size = 1.0 / n_frames
+        mask_ids = np.unique(mask)
+        mask_ids = mask_ids[mask_ids != 0]  # Ignora fondo
+
+        # Simular todos los pasos hacia adelante
+        pos_ys = []
+        pos_xs = []
+
+        for _ in range(n_frames):
+            for mid in mask_ids:
+                m = (mask == mid)
+                pos_y[m] += step_size * dy[m] * flow_amplification
+                pos_x[m] += step_size * dx[m] * flow_amplification
+            pos_ys.append(pos_y.copy())
+            pos_xs.append(pos_x.copy())
+
+        # Invertir el orden de los pasos
+        pos_ys = pos_ys[::-1]
+        pos_xs = pos_xs[::-1]
+
+        fig, ax = plt.subplots(figsize=(4, 4))
+        ax.axis('off')
+
+        def update(frame):
+            ax.clear()
+            ax.axis('off')
+
+            frame_img = np.dstack([image] * 3) if image.ndim == 2 else image.copy()
+            frame_img = frame_img.astype(np.float32)
+            frame_img /= frame_img.max()
+            frame_img = (255 * frame_img).astype(np.uint8)
+
+            py = pos_ys[frame]
+            px = pos_xs[frame]
+
+            for mid in mask_ids:
+                m = (mask == mid)
+                ys = np.clip(np.round(py[m]).astype(int), 0, H - 1)
+                xs = np.clip(np.round(px[m]).astype(int), 0, W - 1)
+                frame_img[ys, xs] = [255, 0, 0]  # Rojo
+
+            ax.imshow(frame_img)
+            return []
+
+        ani = animation.FuncAnimation(fig, update, frames=n_frames, blit=False)
+
+        ext = os.path.splitext(save_path)[1].lower()
+        if ext == '.gif':
+            ani.save(save_path, writer='pillow', fps=fps)
+        else:
+            ani.save(save_path, fps=fps, codec='libx264')
+
+        plt.close(fig)
