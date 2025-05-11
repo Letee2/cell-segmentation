@@ -103,7 +103,7 @@ class Visualizer:
                 save_path: Ruta para guardar la imagen
             """
 
-            step = 5 # Flechas cada 5 píxeles
+            step = 3 # Flechas cada 3 píxeles
             H, W = dy.shape
 
             Y, X = np.mgrid[0:H:step, 0:W:step] 
@@ -192,3 +192,56 @@ class Visualizer:
             ani.save(save_path, fps=fps, codec='libx264')
 
         plt.close(fig)
+
+    def create_pixel_accuracy_image(self, mask_path: str, gt_path: str, save_path: Optional[str] = None) -> Optional[str]:
+        """
+        Crea una imagen de precisión pixelar comparando dos máscaras binarias.
+
+        Args:
+            mask_pah: Ruta de la máscara
+            gt_path: Ruta del gt
+            save_path: Ruta para guardar la imagen resultante (opcional). Si no se proporciona, se genera junto a imagen1.
+
+        Returns:
+            Ruta donde se guardó la imagen si se guarda; None si no se guarda.
+        """
+        img1 = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+        # Convertir a blanco y negro: todo >1 se vuelve 255 (blanco), el resto 0 (negro)
+        _, img1 = cv2.threshold(img1, 1, 255, cv2.THRESH_BINARY)
+        img2 = cv2.imread(gt_path, 0)
+        _, img2 = cv2.threshold(img2, 127, 255, cv2.THRESH_BINARY)
+
+        if img1 is None or img2 is None:
+            raise FileNotFoundError("Una de las imágenes no se pudo cargar.")
+
+        if img1.shape != img2.shape:
+            raise ValueError("Las imágenes deben tener el mismo tamaño.")
+
+        resultado = np.zeros((img1.shape[0], img1.shape[1], 3), dtype=np.uint8)
+
+        # Verde fuerte para coincidencias
+        resultado[(img1 == 255) & (img2 == 255)] = [0, 255, 0]
+
+        # Rojo para los falsos positivos
+        resultado[(img1 == 255) & (img2 == 0)] = [0, 0, 255]
+
+        # Azul para los verdaderos negativos
+        resultado[(img1 == 0) & (img2 == 255)] = [255, 0, 0]
+
+        # Añadir la leyenda a la imagen
+        leyenda = np.zeros((100, resultado.shape[1], 3), dtype=np.uint8)  # Espacio para la leyenda
+        cv2.putText(leyenda, "Verde: Coincidencias (True Positives)", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+        cv2.putText(leyenda, "Rojo: Falsos Positivos", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+        cv2.putText(leyenda, "Azul: Falsos Negativos", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+
+        # Concatenar la leyenda con la imagen de resultado
+        resultado_con_leyenda = np.vstack((resultado, leyenda))
+
+        # Determinar ruta de guardado si no se proporciona
+        if save_path is None:
+            dir_base = os.path.dirname(mask_path)
+            nombre_base = os.path.splitext(os.path.basename(mask_path))[0]
+            save_path = os.path.join(dir_base, f"{nombre_base}_pixel_accuracy.png")
+
+        cv2.imwrite(save_path, resultado_con_leyenda)
+        return save_path
