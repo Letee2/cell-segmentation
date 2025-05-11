@@ -125,13 +125,13 @@ class Visualizer:
                             dx: np.ndarray,
                             mask: np.ndarray,
                             save_path: str,
-                            n_frames: int = 20,
-                            fps: int = 5,
-                            flow_amplification: float = 2.0) -> None:
+                            n_frames: int = 5,
+                            fps: int = 2,
+                            flow_amplification: float = 5.0) -> None:
         """
         Genera una animación GIF/MP4 donde los píxeles de cada célula
-        se desplazan siguiendo los vectores, pero se reproduce en reversa
-        para simular flujo hacia el centro.
+        se desplazan hacia el centro de la célula, mostrando las posiciones iniciales
+        en el primer frame y moviéndose hacia el centro en los frames siguientes.
         """
 
         H, W = dy.shape
@@ -143,21 +143,38 @@ class Visualizer:
         mask_ids = np.unique(mask)
         mask_ids = mask_ids[mask_ids != 0]  # Ignora fondo
 
-        # Simular todos los pasos hacia adelante
+        # Calcular los centros de las células
+        cell_centers = {}
+        for mid in mask_ids:
+            m = (mask == mid)
+            center_y = np.mean(np.where(m)[0])  # Media de las posiciones en Y
+            center_x = np.mean(np.where(m)[1])  # Media de las posiciones en X
+            cell_centers[mid] = (center_y, center_x)
+
+        # Simular todos los pasos hacia el centro de la célula
         pos_ys = []
         pos_xs = []
 
         for _ in range(n_frames):
             for mid in mask_ids:
                 m = (mask == mid)
-                pos_y[m] += step_size * dy[m] * flow_amplification
-                pos_x[m] += step_size * dx[m] * flow_amplification
+                center_y, center_x = cell_centers[mid]
+
+                # Calcular la dirección hacia el centro
+                direction_y = center_y - pos_y[m]
+                direction_x = center_x - pos_x[m]
+
+                # Normalizar la dirección y amplificar el movimiento
+                norm = np.sqrt(direction_y**2 + direction_x**2)
+                direction_y /= norm
+                direction_x /= norm
+
+                # Actualizar las posiciones de los píxeles
+                pos_y[m] += step_size * direction_y * flow_amplification
+                pos_x[m] += step_size * direction_x * flow_amplification
+
             pos_ys.append(pos_y.copy())
             pos_xs.append(pos_x.copy())
-
-        # Invertir el orden de los pasos
-        pos_ys = pos_ys[::-1]
-        pos_xs = pos_xs[::-1]
 
         fig, ax = plt.subplots(figsize=(4, 4))
         ax.axis('off')
@@ -166,19 +183,27 @@ class Visualizer:
             ax.clear()
             ax.axis('off')
 
+            # Crear la imagen de fondo
             frame_img = np.dstack([image] * 3) if image.ndim == 2 else image.copy()
             frame_img = frame_img.astype(np.float32)
             frame_img /= frame_img.max()
             frame_img = (255 * frame_img).astype(np.uint8)
 
+            # Obtener las posiciones actuales de los píxeles
             py = pos_ys[frame]
             px = pos_xs[frame]
 
             for mid in mask_ids:
                 m = (mask == mid)
+
+                # Obtener las posiciones de los píxeles
                 ys = np.clip(np.round(py[m]).astype(int), 0, H - 1)
                 xs = np.clip(np.round(px[m]).astype(int), 0, W - 1)
-                frame_img[ys, xs] = [255, 0, 0]  # Rojo
+
+                if frame == 0:  # Primer frame: mostrar las posiciones iniciales en rojo
+                    frame_img[ys, xs] = [255, 0, 0]  # Rojo para posiciones iniciales
+                else:  # En los siguientes frames, mover hacia el centro
+                    frame_img[ys, xs] = [255, 0, 0]  # Rojo para mostrar el movimiento
 
             ax.imshow(frame_img)
             return []
