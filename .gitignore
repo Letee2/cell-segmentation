@@ -9,6 +9,7 @@ __pycache__/
 input_images/*
 output_segmentations/*
 preprocessed/*
+ground_truth/*
 
 # Keep .gitkeep files
 !input_images/.gitkeep

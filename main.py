@@ -3,6 +3,7 @@ import argparse
 import yaml
 import os
 import json
+import numpy as np
 from segmentation.segmentation import SegmentationPipeline
 
 def main():

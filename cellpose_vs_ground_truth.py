@@ -44,7 +44,8 @@ def get_mask_metrics(mask_gt, mask_pred):
 def process_image(file_name):
     try:
         # Extraer el número del identificador (sin la 't')
-        tnum = file_name[1:].zfill(3)  # Rellenamos con ceros a la izquierda hasta 3 dígitos
+        frame_num = file_name.split('_')[2].zfill(3)
+ # Rellenamos con ceros a la izquierda hasta 3 dígitos
         
         # Paths
         base_path = "output_segmentations/Fluo-N2DL-HeLa_01"
@@ -52,8 +53,8 @@ def process_image(file_name):
         img_path = os.path.join(input_path, f"{file_name}.tif")
         mask_path = os.path.join(base_path, f"{file_name}_mask.tif")
         composite_path = os.path.join(base_path, f"{file_name}_composite.tif")
-        # El ground truth tiene un formato diferente (man_segXXX.tif)
-        ground_truth_path = os.path.join("ground_truth/Fluo-N2DL-HeLa_01", f"man_seg{tnum}.tif")
+        # El ground truth tiene un formato diferente (MASK_00_XXX_g.png)
+        ground_truth_path = os.path.join("ground_truth", f"MASK_00_{frame_num}_g.png")
         
         # Verificar que todos los archivos existan
         for path in [img_path, mask_path, composite_path, ground_truth_path]:

@@ -40,9 +40,9 @@ class SegmentationPipeline:
 
     
     def process_single_image(self, image_path: str, 
-                           save_mask: bool = False,
+                           save_mask: bool = True,
                            save_composite: bool = True,
-                           save_metadata: bool = False,
+                           save_metadata: bool = True,
                            save_visualization: bool = False,
                            save_flow_map: bool = True,
                            save_flow_animation: bool = True) -> Dict[str, Any]:
@@ -126,10 +126,12 @@ class SegmentationPipeline:
         if gt_dir:
             import re
             basename = os.path.basename(image_path)
-            match = re.search(r't(\d+)', basename)
+            match = re.search(r"_(\d{3})\.jpg$", basename)
             if match:
                 frame_num = match.group(1).zfill(3)
-                gt_filename_options = [f"man_seg{frame_num}.tif", f"man_seg{int(frame_num)}.tif"]
+                # TODO cambiar por el número del stack que se busca
+                gt_filename_options = [f"MASK_00_{frame_num}_g.png"]
+
                 for fname in gt_filename_options:
                     gt_path = os.path.join(gt_dir, fname)
                     if os.path.exists(gt_path):
@@ -197,10 +199,11 @@ class SegmentationPipeline:
 
                 # Buscar número de frame desde el nombre del archivo
                 basename = os.path.basename(pred_path)
-                match = re.search(r't(\d+)', basename)  # ej: t012_mask.tif → 012
-                if match:
-                    frame_num = match.group(1).zfill(3)
-                    gt_filename = f"man_seg{frame_num}.tif"
+                num = basename.split("_")[2]
+
+                if num:
+                    # TODO cambiar por el número del stack que se busca
+                    gt_filename = f"MASK_63_{num}_b.jpg"
                     gt_path = os.path.join(gt_dir, gt_filename)
 
                     if os.path.exists(gt_path):
@@ -213,11 +216,14 @@ class SegmentationPipeline:
 
         # Calcular estadísticas generales
         cell_counts = [r['cell_count'] for r in results]
+
+        if len(cell_counts)==0:
+            cell_counts.append(0)
         
         stats = {
             'total_images': len(results),
             'total_cells': sum(cell_counts),
-            'avg_cells_per_image': np.mean(cell_counts),
+            'avg_cells_per_image': sum(cell_counts)/len(cell_counts),
             'processing_time_seconds': time.time() - start_time
         }
         
@@ -247,10 +253,13 @@ class SegmentationPipeline:
             # Calcular estadísticas de la escena
             cell_counts = [r['cell_count'] for r in results]
             
+            if len(cell_counts)==0:
+                cell_counts.append(0)
+
             stats = {
                 'total_images': len(results),
                 'total_cells': sum(cell_counts),
-                'avg_cells_per_image': np.mean(cell_counts),
+                'avg_cells_per_image': sum(cell_counts)/len(cell_counts),
             }
             
             scene_results[scene_id] = {

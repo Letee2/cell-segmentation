@@ -58,13 +58,16 @@ class FileUtils:
                     diameter = float(diameters[0])
                 elif isinstance(diameters, (int, float)):
                     diameter = float(diameters)
+
+        if len(cell_areas)==0:
+            cell_areas.append(0)
         
         metadata = {
             'image_filename': os.path.basename(image_path),
             'cell_count': cell_count,
             'cell_areas': cell_areas,
             'median_cell_area': int(np.median(cell_areas)) if cell_areas else 0,
-            'mean_cell_area': int(np.mean(cell_areas)) if cell_areas else 0,
+            'mean_cell_area': sum(cell_areas)/len(cell_areas),
             'cellpose_diameter': diameter
         }
         if extra_data:
