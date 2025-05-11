@@ -28,6 +28,7 @@ class FileUtils:
         else:
             mask_save = mask.astype(np.uint8)
         
+        _, mask_save = cv2.threshold(mask_save, 1, 255, cv2.THRESH_BINARY)
         cv2.imwrite(output_path, mask_save)
     
     def save_composite(self, image: np.ndarray, mask: np.ndarray, output_path: str) -> None:
