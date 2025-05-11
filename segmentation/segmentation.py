@@ -211,9 +211,6 @@ class SegmentationPipeline:
                 gt_filename = f"{name_no_ext}_gt.png"  
                 gt_path = os.path.join(gt_dir, gt_filename)
                 gt_path = os.path.normpath(gt_path)  # Asegura que la ruta esté bien formateada
-                
-                # Depuración: imprimir el nombre y la ruta de ground truth
-                print(f"Buscando Ground Truth en: {gt_path}")
 
                 if os.path.exists(gt_path):
                     # Evaluar la segmentación con el ground truth
