@@ -103,7 +103,7 @@ class Visualizer:
                 save_path: Ruta para guardar la imagen
             """
 
-            step = 3 # Flechas cada 3 píxeles
+            step = 5 # Flechas cada 5 píxeles
             H, W = dy.shape
 
             Y, X = np.mgrid[0:H:step, 0:W:step] 
@@ -193,21 +193,21 @@ class Visualizer:
 
         plt.close(fig)
 
-    def create_pixel_accuracy_image(self, mask_path: str, gt_path: str, save_path: Optional[str] = None) -> Optional[str]:
+    def create_metrics_image(self, mask_path: str, gt_path: str, save_path: Optional[str] = None) -> Optional[str]:
         """
-        Crea una imagen de precisión pixelar comparando dos máscaras binarias.
+        Crea una imagen que muestra gráficamente las métricas que evaluan
 
         Args:
             mask_pah: Ruta de la máscara
             gt_path: Ruta del gt
-            save_path: Ruta para guardar la imagen resultante (opcional). Si no se proporciona, se genera junto a imagen1.
+            save_path: Ruta para guardar la imagen resultante (opcional).
 
         Returns:
             Ruta donde se guardó la imagen si se guarda; None si no se guarda.
         """
         img1 = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
-        # Convertir a blanco y negro: todo >1 se vuelve 255 (blanco), el resto 0 (negro)
-        _, img1 = cv2.threshold(img1, 1, 255, cv2.THRESH_BINARY)
+        # Convertir a blanco y negro: todo >10 se vuelve 255 (blanco), el resto 0 (negro)
+        _, img1 = cv2.threshold(img1, 10, 255, cv2.THRESH_BINARY)
         img2 = cv2.imread(gt_path, 0)
         _, img2 = cv2.threshold(img2, 127, 255, cv2.THRESH_BINARY)
 
@@ -241,7 +241,7 @@ class Visualizer:
         if save_path is None:
             dir_base = os.path.dirname(mask_path)
             nombre_base = os.path.splitext(os.path.basename(mask_path))[0]
-            save_path = os.path.join(dir_base, f"{nombre_base}_pixel_accuracy.png")
+            save_path = os.path.join(dir_base, f"{nombre_base}_metrics_image.png")
 
         cv2.imwrite(save_path, resultado_con_leyenda)
         return save_path
