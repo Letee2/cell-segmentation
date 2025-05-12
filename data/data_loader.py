@@ -22,8 +22,9 @@ class DataLoader:
     
     def get_image_paths(self) -> List[str]:
         """Obtiene las rutas de todas las imágenes que coinciden con el patrón."""
-        pattern_path = os.path.join(self.input_dir, self.pattern)
-        return sorted(glob.glob(pattern_path))
+        pattern = self.config['data']['pattern']
+        input_dir = self.config['data']['input_dir']
+        return sorted(glob.glob(os.path.join(input_dir, '**', pattern), recursive=True))
     
     def organize_by_scene(self) -> Dict[str, List[str]]:
         """Organiza las imágenes por escena basándose en el patrón de nombre."""

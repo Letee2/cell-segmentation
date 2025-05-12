@@ -3,6 +3,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import cv2
+import imageio.v3 as iio
 from typing import Optional, Tuple, List
 import matplotlib.animation as animation
 import yaml
@@ -125,13 +126,13 @@ class Visualizer:
                             dx: np.ndarray,
                             mask: np.ndarray,
                             save_path: str,
-                            n_frames: int = 20,
-                            fps: int = 5,
-                            flow_amplification: float = 2.0) -> None:
+                            n_frames: int = 5,
+                            fps: int = 2,
+                            flow_amplification: float = 5.0) -> None:
         """
         Genera una animación GIF/MP4 donde los píxeles de cada célula
-        se desplazan siguiendo los vectores, pero se reproduce en reversa
-        para simular flujo hacia el centro.
+        se desplazan hacia el centro de la célula, mostrando las posiciones iniciales
+        en el primer frame y moviéndose hacia el centro en los frames siguientes.
         """
 
         H, W = dy.shape
@@ -143,21 +144,38 @@ class Visualizer:
         mask_ids = np.unique(mask)
         mask_ids = mask_ids[mask_ids != 0]  # Ignora fondo
 
-        # Simular todos los pasos hacia adelante
+        # Calcular los centros de las células
+        cell_centers = {}
+        for mid in mask_ids:
+            m = (mask == mid)
+            center_y = np.mean(np.where(m)[0])  # Media de las posiciones en Y
+            center_x = np.mean(np.where(m)[1])  # Media de las posiciones en X
+            cell_centers[mid] = (center_y, center_x)
+
+        # Simular todos los pasos hacia el centro de la célula
         pos_ys = []
         pos_xs = []
 
         for _ in range(n_frames):
             for mid in mask_ids:
                 m = (mask == mid)
-                pos_y[m] += step_size * dy[m] * flow_amplification
-                pos_x[m] += step_size * dx[m] * flow_amplification
+                center_y, center_x = cell_centers[mid]
+
+                # Calcular la dirección hacia el centro
+                direction_y = center_y - pos_y[m]
+                direction_x = center_x - pos_x[m]
+
+                # Normalizar la dirección y amplificar el movimiento
+                norm = np.sqrt(direction_y**2 + direction_x**2)
+                direction_y /= norm
+                direction_x /= norm
+
+                # Actualizar las posiciones de los píxeles
+                pos_y[m] += step_size * direction_y * flow_amplification
+                pos_x[m] += step_size * direction_x * flow_amplification
+
             pos_ys.append(pos_y.copy())
             pos_xs.append(pos_x.copy())
-
-        # Invertir el orden de los pasos
-        pos_ys = pos_ys[::-1]
-        pos_xs = pos_xs[::-1]
 
         fig, ax = plt.subplots(figsize=(4, 4))
         ax.axis('off')
@@ -166,19 +184,27 @@ class Visualizer:
             ax.clear()
             ax.axis('off')
 
+            # Crear la imagen de fondo
             frame_img = np.dstack([image] * 3) if image.ndim == 2 else image.copy()
             frame_img = frame_img.astype(np.float32)
             frame_img /= frame_img.max()
             frame_img = (255 * frame_img).astype(np.uint8)
 
+            # Obtener las posiciones actuales de los píxeles
             py = pos_ys[frame]
             px = pos_xs[frame]
 
             for mid in mask_ids:
                 m = (mask == mid)
+
+                # Obtener las posiciones de los píxeles
                 ys = np.clip(np.round(py[m]).astype(int), 0, H - 1)
                 xs = np.clip(np.round(px[m]).astype(int), 0, W - 1)
-                frame_img[ys, xs] = [255, 0, 0]  # Rojo
+
+                if frame == 0:  # Primer frame: mostrar las posiciones iniciales en rojo
+                    frame_img[ys, xs] = [255, 0, 0]  # Rojo para posiciones iniciales
+                else:  # En los siguientes frames, mover hacia el centro
+                    frame_img[ys, xs] = [255, 0, 0]  # Rojo para mostrar el movimiento
 
             ax.imshow(frame_img)
             return []
@@ -192,3 +218,66 @@ class Visualizer:
             ani.save(save_path, fps=fps, codec='libx264')
 
         plt.close(fig)
+
+    def create_metrics_image(self, mask_path: str, gt_path: str, save_path: Optional[str] = None) -> Optional[str]:
+        """
+        Crea una imagen que muestra gráficamente las métricas que evaluan
+
+        Args:
+            mask_pah: Ruta de la máscara
+            gt_path: Ruta del gt
+            save_path: Ruta para guardar la imagen resultante (opcional).
+
+        Returns:
+            Ruta donde se guardó la imagen si se guarda; None si no se guarda.
+        """
+        img1 = iio.imread(mask_path)
+        img2 = iio.imread(gt_path)
+
+        if img1 is None or img2 is None:
+            raise FileNotFoundError("Una de las imágenes no se pudo cargar.")
+
+        if img1.shape != img2.shape:
+            raise ValueError("Las imágenes deben tener el mismo tamaño.")
+
+        # Asegurar que sean uint8 para aplicar threshold correctamente
+        img1 = img1.astype(np.uint8)
+        img2 = img2.astype(np.uint8)
+
+        _, img1 = cv2.threshold(img1, 10, 255, cv2.THRESH_BINARY)
+        _, img2 = cv2.threshold(img2, 10, 255, cv2.THRESH_BINARY)
+
+        if img1 is None or img2 is None:
+            raise FileNotFoundError("Una de las imágenes no se pudo cargar.")
+
+        if img1.shape != img2.shape:
+            raise ValueError("Las imágenes deben tener el mismo tamaño.")
+
+        resultado = np.zeros((img1.shape[0], img1.shape[1], 3), dtype=np.uint8)
+
+        # Verde fuerte para coincidencias
+        resultado[(img1 == 255) & (img2 == 255)] = [0, 255, 0]
+
+        # Rojo para los falsos positivos
+        resultado[(img1 == 255) & (img2 == 0)] = [0, 0, 255]
+
+        # Azul para los verdaderos negativos
+        resultado[(img1 == 0) & (img2 == 255)] = [255, 0, 0]
+
+        # Añadir la leyenda a la imagen
+        leyenda = np.zeros((100, resultado.shape[1], 3), dtype=np.uint8)  # Espacio para la leyenda
+        cv2.putText(leyenda, "Verde: Coincidencias (True Positives)", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+        cv2.putText(leyenda, "Rojo: Falsos Positivos", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+        cv2.putText(leyenda, "Azul: Falsos Negativos", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+
+        # Concatenar la leyenda con la imagen de resultado
+        resultado_con_leyenda = np.vstack((resultado, leyenda))
+
+        # Determinar ruta de guardado si no se proporciona
+        if save_path is None:
+            dir_base = os.path.dirname(mask_path)
+            nombre_base = os.path.splitext(os.path.basename(mask_path))[0]
+            save_path = os.path.join(dir_base, f"{nombre_base}_metrics_image.png")
+
+        cv2.imwrite(save_path, resultado_con_leyenda)
+        return save_path
