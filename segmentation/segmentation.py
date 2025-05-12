@@ -126,8 +126,9 @@ class SegmentationPipeline:
         gt_dir = self.config['data'].get('ground_truth_dir', None)
         evaluation = None
         if gt_dir and save_mask:
-            basename = os.path.basename(image_path)                  # Maxt0_00_001.jpg
-            name_no_ext = os.path.splitext(basename)[0]             # Maxt0_00_001
+            basename = os.path.basename(image_path)                  # Maxt0_00_001_a.jpg
+            name_no_ext = os.path.splitext(basename)[0]             # Maxt0_00_001_a
+            name_no_ext = re.sub(r'_[a-zA-Z]$', '', name_no_ext)
             gt_filename = f"{name_no_ext}_gt.png"                   # Maxt0_00_001_gt.png
             gt_path = os.path.join(gt_dir, gt_filename)
 
