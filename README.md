@@ -24,10 +24,12 @@ CellPose es una herramienta de segmentación basada en redes neuronales que ha s
 ```
 numpy>=1.19.0
 opencv-python>=4.5.0
-cellpose>=2.0.0
+cellpose==2.0.0
 matplotlib>=3.3.0
 pyyaml>=5.4.0
 tqdm>=4.50.0
+scikit-learn==1.6.1
+
 ```
 
 Para instalar las dependencias:
