@@ -6,25 +6,22 @@ import yaml
 from tqdm import tqdm
 import time
 import re
+import imageio.v3 as iio  # Para leer imágenes .tif
+
 from data.data_loader import DataLoader
 from data.data_preprocessor import DataPreprocessor
 from models.cellpose_model import CellPoseModel
 from utils.visualization import Visualizer
 from utils.file_utils import FileUtils
-
 from utils.evaluate_segmentation import evaluate_masks
-#import imageio.v3 as iio  # For reading TIFFs
-import cv2 as cv  # Para leer imágenes normales
 
 
 class SegmentationPipeline:
     def __init__(self, config_path: str):
-        """Inicializa el pipeline de segmentación."""
         self.config_path = config_path
         with open(config_path, 'r') as file:
             self.config = yaml.safe_load(file)
-        
-        # Inicializar componentes
+
         self.data_loader = DataLoader(config_path)
         self.preprocessor = DataPreprocessor(config_path)
         self.model = CellPoseModel(config_path)
@@ -35,8 +32,8 @@ class SegmentationPipeline:
         """
         Compara máscara predicha vs ground truth y devuelve métricas.
         """
-        pred_mask = cv.imread(pred_mask_path, cv.IMREAD_GRAYSCALE)
-        gt_mask = cv.imread(gt_mask_path, cv.IMREAD_GRAYSCALE)
+        pred_mask = iio.imread(pred_mask_path)
+        gt_mask = iio.imread(gt_mask_path)
         return evaluate_masks(gt_mask, pred_mask)
 
     
@@ -46,7 +43,7 @@ class SegmentationPipeline:
                            save_metadata: bool = True,
                            save_visualization: bool = True,
                            save_flow_map: bool = True,
-                           save_flow_animation: bool = False,
+                           save_flow_animation: bool = True,
                            save_metrics_image: bool = True) -> Dict[str, Any]:
         """
         Procesa una sola imagen a través del pipeline completo.
@@ -126,15 +123,17 @@ class SegmentationPipeline:
         gt_dir = self.config['data'].get('ground_truth_dir', None)
         evaluation = None
         if gt_dir and save_mask:
-            basename = os.path.basename(image_path)                  # Maxt0_00_001.jpg
-            name_no_ext = os.path.splitext(basename)[0]             # Maxt0_00_001
-            gt_filename = f"{name_no_ext}_gt.png"                   # Maxt0_00_001_gt.png
-            gt_path = os.path.join(gt_dir, gt_filename)
-
-            if os.path.exists(gt_path):
-                mask_path = self.data_loader.get_output_path(image_path, suffix='_mask')
-                evaluation = self.evaluate_single_image(mask_path, gt_path)
-
+            basename = os.path.basename(image_path)
+            match = re.search(r't(\d+)', basename)
+            if match:
+                frame_num = match.group(1).zfill(3)
+                gt_filename_options = [f"man_seg{frame_num}.tif", f"man_seg{int(frame_num)}.tif"]
+                for fname in gt_filename_options:
+                    gt_path = os.path.join(gt_dir, fname)
+                    if os.path.exists(gt_path):
+                        mask_path = self.data_loader.get_output_path(image_path, suffix='_mask')
+                        evaluation = self.evaluate_single_image(mask_path, gt_path)
+                        break
             if evaluation:
                 results['evaluation'] = evaluation
                 # Guardar imagen de pixel accuracy si se solicita y se realiza evaluación
@@ -177,8 +176,6 @@ class SegmentationPipeline:
             results.extend(batch_results)
         
         return results
-    
-     # asegúrate de tener esto importado
 
     def process_all_images(self, **kwargs) -> Dict[str, Any]:
         """
@@ -201,23 +198,19 @@ class SegmentationPipeline:
                 pred_path = result['files'].get('mask')
                 if not pred_path:
                     continue
-
-                # Obtener el nombre del archivo de la imagen
                 basename = os.path.basename(pred_path)
-                name_no_ext = os.path.splitext(basename)[0]  # Obtiene el nombre sin extensión
-                name_no_ext = name_no_ext.replace("_mask", "")
-
-                # Crear el nombre del archivo ground truth siguiendo el formato de process_single_image
-                gt_filename = f"{name_no_ext}_gt.png"  
-                gt_path = os.path.join(gt_dir, gt_filename)
-                gt_path = os.path.normpath(gt_path)  # Asegura que la ruta esté bien formateada
-
-                if os.path.exists(gt_path):
-                    # Evaluar la segmentación con el ground truth
-                    metrics = self.evaluate_single_image(pred_path, gt_path)
-                    result['evaluation'] = metrics
+                match = re.search(r't(\d+)', basename)
+                if match:
+                    frame_num = match.group(1).zfill(3)
+                    gt_filename = f"man_seg{frame_num}.tif"
+                    gt_path = os.path.join(gt_dir, gt_filename)
+                    if os.path.exists(gt_path):
+                        metrics = self.evaluate_single_image(pred_path, gt_path)
+                        result['evaluation'] = metrics
+                    else:
+                        print(f"⚠️ Ground truth not found: {gt_filename}")
                 else:
-                    print(f"⚠️ Ground truth no encontrado: {gt_filename}")
+                    print(f"❌ No se pudo extraer el número de frame desde {basename}")
 
 
         # Calcular estadísticas generales

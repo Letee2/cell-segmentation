@@ -3,6 +3,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import cv2
+import imageio.v3 as iio
 from typing import Optional, Tuple, List
 import matplotlib.animation as animation
 import yaml
@@ -230,11 +231,21 @@ class Visualizer:
         Returns:
             Ruta donde se guardó la imagen si se guarda; None si no se guarda.
         """
-        img1 = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
-        # Convertir a blanco y negro: todo >10 se vuelve 255 (blanco), el resto 0 (negro)
+        img1 = iio.imread(mask_path)
+        img2 = iio.imread(gt_path)
+
+        if img1 is None or img2 is None:
+            raise FileNotFoundError("Una de las imágenes no se pudo cargar.")
+
+        if img1.shape != img2.shape:
+            raise ValueError("Las imágenes deben tener el mismo tamaño.")
+
+        # Asegurar que sean uint8 para aplicar threshold correctamente
+        img1 = img1.astype(np.uint8)
+        img2 = img2.astype(np.uint8)
+
         _, img1 = cv2.threshold(img1, 10, 255, cv2.THRESH_BINARY)
-        img2 = cv2.imread(gt_path, 0)
-        _, img2 = cv2.threshold(img2, 127, 255, cv2.THRESH_BINARY)
+        _, img2 = cv2.threshold(img2, 10, 255, cv2.THRESH_BINARY)
 
         if img1 is None or img2 is None:
             raise FileNotFoundError("Una de las imágenes no se pudo cargar.")
