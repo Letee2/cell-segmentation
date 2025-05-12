@@ -13,7 +13,8 @@ from utils.visualization import Visualizer
 from utils.file_utils import FileUtils
 
 from utils.evaluate_segmentation import evaluate_masks
-import imageio.v3 as iio  # For reading TIFFs
+#import imageio.v3 as iio  # For reading TIFFs
+import cv2 as cv  # Para leer imágenes normales
 
 
 class SegmentationPipeline:
@@ -34,18 +35,19 @@ class SegmentationPipeline:
         """
         Compara máscara predicha vs ground truth y devuelve métricas.
         """
-        pred_mask = iio.imread(pred_mask_path)
-        gt_mask = iio.imread(gt_mask_path)
+        pred_mask = cv.imread(pred_mask_path, cv.IMREAD_GRAYSCALE)
+        gt_mask = cv.imread(gt_mask_path, cv.IMREAD_GRAYSCALE)
         return evaluate_masks(gt_mask, pred_mask)
 
     
     def process_single_image(self, image_path: str, 
-                           save_mask: bool = False,
+                           save_mask: bool = True,
                            save_composite: bool = True,
-                           save_metadata: bool = False,
-                           save_visualization: bool = False,
+                           save_metadata: bool = True,
+                           save_visualization: bool = True,
                            save_flow_map: bool = True,
-                           save_flow_animation: bool = True) -> Dict[str, Any]:
+                           save_flow_animation: bool = False,
+                           save_metrics_image: bool = True) -> Dict[str, Any]:
         """
         Procesa una sola imagen a través del pipeline completo.
         
@@ -120,23 +122,28 @@ class SegmentationPipeline:
             results['files']['flow_animation'] = flow_anim_path
 
             
-        # Evaluar contra ground truth si está disponible
+        # Evaluar contra ground truth si está disponible y se guardan las máscaras
         gt_dir = self.config['data'].get('ground_truth_dir', None)
         evaluation = None
-        if gt_dir:
-            import re
-            basename = os.path.basename(image_path)
-            match = re.search(r't(\d+)', basename)
-            if match:
-                frame_num = match.group(1).zfill(3)
-                gt_filename_options = [f"man_seg{frame_num}.tif", f"man_seg{int(frame_num)}.tif"]
-                for fname in gt_filename_options:
-                    gt_path = os.path.join(gt_dir, fname)
-                    if os.path.exists(gt_path):
-                        evaluation = self.evaluate_single_image(self.data_loader.get_output_path(image_path, suffix='_mask'), gt_path)
-                        break
+        if gt_dir and save_mask:
+            basename = os.path.basename(image_path)                  # Maxt0_00_001.jpg
+            name_no_ext = os.path.splitext(basename)[0]             # Maxt0_00_001
+            gt_filename = f"{name_no_ext}_gt.png"                   # Maxt0_00_001_gt.png
+            gt_path = os.path.join(gt_dir, gt_filename)
+
+            if os.path.exists(gt_path):
+                mask_path = self.data_loader.get_output_path(image_path, suffix='_mask')
+                evaluation = self.evaluate_single_image(mask_path, gt_path)
+
             if evaluation:
                 results['evaluation'] = evaluation
+                # Guardar imagen de pixel accuracy si se solicita y se realiza evaluación
+                if save_metrics_image:
+                    metrics_image_path = self.visualizer.create_metrics_image(
+                        mask_path = mask_path,      # máscara de la imagen
+                        gt_path = gt_path,         # ground truth 
+                    )
+                    results['files']['metrics_image'] = metrics_image_path
 
         if save_metadata:
             metadata_path = f"{base_name}_metadata.json"
@@ -179,37 +186,39 @@ class SegmentationPipeline:
         
         Args:
             **kwargs: Argumentos para process_single_image
-            
         Returns:
             Diccionario con resultados y estadísticas
         """
         image_paths = self.data_loader.get_image_paths()
         start_time = time.time()
-        
+
         results = self.process_batch(image_paths, **kwargs)
 
-        if 'ground_truth_dir' in self.config['data']:
-            gt_dir = self.config['data']['ground_truth_dir']
+        # Si existe un directorio de ground truth, procesamos las evaluaciones
+        gt_dir = self.config['data'].get('ground_truth_dir', None)
+        if gt_dir:
             for result in results:
                 pred_path = result['files'].get('mask')
                 if not pred_path:
                     continue
 
-                # Buscar número de frame desde el nombre del archivo
+                # Obtener el nombre del archivo de la imagen
                 basename = os.path.basename(pred_path)
-                match = re.search(r't(\d+)', basename)  # ej: t012_mask.tif → 012
-                if match:
-                    frame_num = match.group(1).zfill(3)
-                    gt_filename = f"man_seg{frame_num}.tif"
-                    gt_path = os.path.join(gt_dir, gt_filename)
+                name_no_ext = os.path.splitext(basename)[0]  # Obtiene el nombre sin extensión
+                name_no_ext = name_no_ext.replace("_mask", "")
 
-                    if os.path.exists(gt_path):
-                        metrics = self.evaluate_single_image(pred_path, gt_path)
-                        result['evaluation'] = metrics
-                    else:
-                        print(f"⚠️ Ground truth not found: {gt_filename}")
+                # Crear el nombre del archivo ground truth siguiendo el formato de process_single_image
+                gt_filename = f"{name_no_ext}_gt.png"  
+                gt_path = os.path.join(gt_dir, gt_filename)
+                gt_path = os.path.normpath(gt_path)  # Asegura que la ruta esté bien formateada
+
+                if os.path.exists(gt_path):
+                    # Evaluar la segmentación con el ground truth
+                    metrics = self.evaluate_single_image(pred_path, gt_path)
+                    result['evaluation'] = metrics
                 else:
-                    print(f"❌ No se pudo extraer el número de frame desde {basename}")
+                    print(f"⚠️ Ground truth no encontrado: {gt_filename}")
+
 
         # Calcular estadísticas generales
         cell_counts = [r['cell_count'] for r in results]

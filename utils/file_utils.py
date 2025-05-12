@@ -28,6 +28,10 @@ class FileUtils:
         else:
             mask_save = mask.astype(np.uint8)
         
+        # Convertir la máscara en una imagen binaria, donde las células se vuelven blancas (255) y el fondo negro (0)
+        mask_save[mask_save > 0] = 255
+
+        # Guardar la máscara como una imagen
         cv2.imwrite(output_path, mask_save)
     
     def save_composite(self, image: np.ndarray, mask: np.ndarray, output_path: str) -> None:
