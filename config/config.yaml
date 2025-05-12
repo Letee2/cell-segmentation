@@ -1,21 +1,21 @@
 cellpose:
-  cellprob_threshold: 0.35
+  cellprob_threshold: 0.0          # Menor umbral = más detección (aunque con más falsos positivos)
   channels:
-  - 1
-  - 1
-  diameter: 0
-  flow_threshold: 0.5
+  - 2                              # Canal azul (donde está la señal real)
+  - 0                              # Segundo canal 0 = None
+  diameter: 20                     # Aproximadamente, ajústalo a lo que mida una célula en píxeles
+  flow_threshold: 0.4              # Más permisivo que el default (0.5)
   gpu: true
-  model_type: cyto2
+  model_type: cyto2                # Mejor opción general para células con citoplasma
 data:
   ground_truth_dir: "./ground_truth/Green_Maxt0_255"
   input_dir: "./input_images/Green_Maxt0_255"
   output_dir: "./output_segmentations"
-  pattern: "Maxt0_*_*.jpg"
+  pattern: "Maxt0_*_*.jpg"     # Asegúrate que coincida con tus nombres de archivo
 preprocessing:
-  channel_index: 1
-  invert_intensity: false
-  scale_to_01: false
+  channel_index: 2                 # Usa canal azul
+  invert_intensity: false         # No invertir
+  scale_to_01: true               # Normaliza a [0,1]
   use_single_channel: true
 segmentation:
   save_composite: true
